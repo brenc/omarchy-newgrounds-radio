@@ -35,7 +35,7 @@ Item {
   property int skipThreshold: 0
   property var playLog: []
   property bool socketConnected: false
-  property double lastSocketMessageAt: 0
+  property double lastSocketMessageAt: Date.now()
 
   readonly property string listenUrl: audioId > 0
     ? "https://www.newgrounds.com/audio/listen/" + audioId
@@ -150,7 +150,7 @@ Item {
   // half-open initial connection is also reaped.
   Timer {
     interval: 60000
-    running: socket.status === WebSocket.Open
+    running: socket.status === WebSocket.Open || socket.status === WebSocket.Connecting
     repeat: true
     onTriggered: {
       if (Date.now() - root.lastSocketMessageAt > 60000) root.reconnectSocket()
@@ -160,7 +160,11 @@ Item {
   // ---- Playback.
   Process {
     id: player
-    command: ["mpv", "--no-video", "--no-terminal",
+    // --load-scripts=no keeps this managed instance off MPRIS (mpv-mpris
+    // ships with Omarchy): an external pause via the media widget would
+    // desync the pill, which can't observe it. This widget is the control
+    // surface.
+    command: ["mpv", "--no-video", "--no-terminal", "--load-scripts=no",
               "--force-media-title=Newgrounds Radio",
               root.streamUrl]
     onExited: function() {

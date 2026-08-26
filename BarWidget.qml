@@ -23,9 +23,10 @@ BarWidget {
   readonly property var recentTracks: radio && Array.isArray(radio.playLog)
     ? radio.playLog.slice(1, 6) : []
 
-  // URLs and artist names are network data: exec as argv, never a shell string.
+  // URLs and artist names are network data: exec as argv, never a shell
+  // string, and only ever hand xdg-open a web URL.
   function openUrl(u) {
-    if (u) Util.execArgv(["xdg-open", String(u)])
+    if (/^https?:\/\//i.test(String(u))) Util.execArgv(["xdg-open", String(u)])
   }
 
   // Only artist strings that look like a single Newgrounds username get a

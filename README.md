@@ -7,9 +7,9 @@ listener stats, and a play history, with no polling.
 - Compact orange **NG** + play/pause pill in the bar
 - Popup panel with album art, track / artist / genre, live listener count,
   on-air time, and skip votes
-- Recently-played list — every row links to the track on Newgrounds
+- Recently-played list — each track row links to the track on Newgrounds
 - Album art and title link to the track page; the artist links to their
-  Newgrounds user page
+  Newgrounds user page (when the artist is a single username)
 - Desktop notification on track change while you're listening
 - Realtime updates over the station's socket.io feed (a tiny Engine.IO v4
   client over WebSockets — no REST polling), with automatic reconnect
