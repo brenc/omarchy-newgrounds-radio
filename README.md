@@ -4,6 +4,8 @@ Listen to [Newgrounds Radio](https://www.newgroundsradio.com) straight from the
 [Omarchy](https://omarchy.org) bar — realtime now-playing info, album art,
 listener stats, and a play history, with no polling.
 
+![Newgrounds Radio popup in the Omarchy bar](screenshot.png)
+
 - Compact orange **NG** + play/pause pill in the bar
 - Popup panel with album art, track / artist / genre, live listener count,
   on-air time, and skip votes
