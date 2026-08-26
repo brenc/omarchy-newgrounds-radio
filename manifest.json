@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "brenc.newgrounds-radio",
+  "name": "Newgrounds Radio",
+  "version": "1.0.0",
+  "author": "brenc",
+  "description": "Stream Newgrounds Radio with live now-playing track info and art",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Newgrounds Radio",
+    "description": "Play/stop the stream from the bar; popup with album art, live stats, and play history",
+    "category": "Media",
+    "allowMultiple": false
+  }
+}
