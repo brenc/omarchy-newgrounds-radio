@@ -4,6 +4,9 @@ Listen to [Newgrounds Radio](https://www.newgroundsradio.com) straight from the
 [Omarchy](https://omarchy.org) bar — realtime now-playing info, album art,
 listener stats, and a play history, with no polling.
 
+The official Newgrounds Radio client for Omarchy, from the team that runs the
+station.
+
 ![Newgrounds Radio popup in the Omarchy bar](preview.png)
 
 - Compact orange **NG** + play/pause pill in the bar
@@ -97,5 +100,4 @@ separately, and streams from Newgrounds' own servers:
 
 Audio, artwork, and track metadata are served by
 [Newgrounds Radio](https://www.newgroundsradio.com) and remain the property of
-Newgrounds and the respective artists. This plugin is an unofficial client and
-is not affiliated with or endorsed by Newgrounds.
+Newgrounds and the respective artists.
