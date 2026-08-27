@@ -4,7 +4,7 @@ Listen to [Newgrounds Radio](https://www.newgroundsradio.com) straight from the
 [Omarchy](https://omarchy.org) bar — realtime now-playing info, album art,
 listener stats, and a play history, with no polling.
 
-![Newgrounds Radio popup in the Omarchy bar](screenshot.png)
+![Newgrounds Radio popup in the Omarchy bar](preview.png)
 
 - Compact orange **NG** + play/pause pill in the bar
 - Popup panel with album art, track / artist / genre, live listener count,
@@ -26,6 +26,21 @@ Requires `mpv` (included with Omarchy) and `qt6-websockets`:
 omarchy pkg add qt6-websockets
 omarchy plugin add https://github.com/brenc/omarchy-newgrounds-radio.git --enable
 ```
+
+Then add the **Newgrounds Radio** widget to your bar from `omarchy-shell` bar
+settings, or run `omarchy restart shell` if it does not appear.
+
+## Uninstall
+
+```bash
+omarchy plugin remove brenc.newgrounds-radio
+```
+
+That removes the plugin and its bar widget. The plugin never writes outside its
+own entry in `~/.config/omarchy/shell.json`; if you added an optional
+`trackNotifications` override there (see [Usage](#usage)), remove that entry by
+hand. `qt6-websockets` is left installed — remove it with
+`omarchy pkg drop qt6-websockets` if nothing else needs it.
 
 ## Usage
 
@@ -67,4 +82,20 @@ missing `qt6-websockets` — install it and run `omarchy restart shell`.
 
 ## License
 
-[MIT](LICENSE)
+This plugin is [MIT](LICENSE) licensed.
+
+### External dependencies
+
+Nothing is vendored or bundled — the plugin only invokes software you install
+separately, and streams from Newgrounds' own servers:
+
+| Dependency | Role | License |
+|---|---|---|
+| [`mpv`](https://mpv.io) (ships with Omarchy) | Plays the audio stream | GPL-2.0-or-later / LGPL-2.1-or-later |
+| [`qt6-websockets`](https://doc.qt.io/qt-6/qtwebsockets-index.html) | QML WebSocket type for the realtime feed | LGPL-3.0 / GPL-3.0 (Qt open-source terms) |
+| [Quickshell](https://quickshell.org) (via Omarchy) | Shell/QML runtime hosting the widget | LGPL-3.0 |
+
+Audio, artwork, and track metadata are served by
+[Newgrounds Radio](https://www.newgroundsradio.com) and remain the property of
+Newgrounds and the respective artists. This plugin is an unofficial client and
+is not affiliated with or endorsed by Newgrounds.
