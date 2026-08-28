@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Lint staged QML before it lands. Enable once per clone:
+#   git config core.hooksPath .githooks
+set -euo pipefail
+
+mapfile -t staged < <(git diff --cached --name-only --diff-filter=ACM -- '*.qml')
+(( ${#staged[@]} )) || exit 0
+
+if ! command -v omarchy-plugin-lint >/dev/null; then
+  echo "pre-commit: omarchy-plugin-lint not found, skipping QML lint" >&2
+  exit 0
+fi
+
+# The linter reads the worktree, not the index, so a partially staged file is
+# checked as it exists on disk. Say so rather than lint the wrong bytes.
+for f in "${staged[@]}"; do
+  if ! git diff --quiet -- "$f"; then
+    echo "pre-commit: $f has unstaged changes; linting the worktree copy" >&2
+  fi
+done
+
+omarchy-plugin-lint "${staged[@]}"

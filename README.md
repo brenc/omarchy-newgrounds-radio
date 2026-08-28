@@ -83,6 +83,19 @@ it as-is.
 If the widget doesn't appear in the bar at all, the most likely cause is a
 missing `qt6-websockets` — install it and run `omarchy restart shell`.
 
+## Development
+
+Git hooks live in `.githooks` and are committed with the repo. Git does not
+enable a custom hooks path automatically, so run this once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+`pre-commit` then runs `omarchy-plugin-lint` (qmllint with the shell's import
+root wired up) over any staged `.qml` and blocks the commit on a real finding.
+If the linter isn't installed the hook skips rather than fails.
+
 ## License
 
 This plugin is [MIT](LICENSE) licensed.
