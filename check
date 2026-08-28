@@ -1,14 +1,23 @@
 #!/usr/bin/env bash
 # Lint the QML and run the RadioLogic tests. Used by .githooks/pre-commit.
-set -euo pipefail
+#
+# Every check runs even if an earlier one fails, so one invocation reports
+# everything wrong. Deliberately not chained with && : under `set -e` the left
+# side of an && is exempt from errexit, which silently swallowed lint failures.
+set -uo pipefail
 cd "$(dirname "$0")"
 
 runner=/usr/lib/qt6/bin/qmltestrunner
-omarchy-plugin-lint . && omarchy-plugin-lint tests
+status=0
+
+omarchy-plugin-lint . || status=1
+omarchy-plugin-lint tests || status=1
 
 if [[ -x $runner ]]; then
   # Offscreen so the suite runs headless, in a hook, over ssh.
-  QT_QPA_PLATFORM=offscreen "$runner" -input tests/
+  QT_QPA_PLATFORM=offscreen "$runner" -input tests/ || status=1
 else
   echo "qmltestrunner not found at $runner (install qt6-declarative); skipping tests" >&2
 fi
+
+exit $status
