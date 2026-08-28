@@ -24,10 +24,18 @@ BarWidget {
     ? radio.playLog.slice(1, 6) : []
 
   // URLs and artist names are network data: exec as argv, never a shell
-  // string, and only ever hand xdg-open a web URL.
+  // string, and only ever hand xdg-open an https URL the service vetted.
   function openUrl(u) {
-    if (/^https?:\/\//i.test(String(u))) Util.execArgv(["xdg-open", String(u)])
+    if (/^https:\/\//i.test(String(u))) Util.execArgv(["xdg-open", String(u)])
   }
+
+  // The shared tooltip renders with QML's default AutoText detection, which
+  // would treat a crafted track title as markup; drop the "<" that is the
+  // only way to open one. Deleting rather than escaping: with no tag left
+  // the text can't be detected as rich, so an entity would show up
+  // literally as "&amp;". ">" is kept - it can't start a tag, and titles
+  // like "Level 1 -> 2" should read correctly.
+  function plain(s) { return String(s).replace(/</g, "") }
 
   // Only artist strings that look like a single Newgrounds username get a
   // link; jingles ("Newgrounds Radio! ...") and multi-credit strings would
@@ -116,8 +124,9 @@ BarWidget {
       if (mouse.button === Qt.LeftButton) root.radio.toggle()
       else root.popupOpen = !root.popupOpen
     }
-    onEntered: if (root.bar) root.bar.showTooltip(root,
-      root.title ? "Newgrounds Radio — " + root.title + (root.artist ? " · " + root.artist : "") : "Newgrounds Radio")
+    onEntered: if (root.bar) root.bar.showTooltip(root, root.title
+      ? root.plain("Newgrounds Radio — " + root.title + (root.artist ? " · " + root.artist : ""))
+      : "Newgrounds Radio")
     onExited: if (root.bar) root.bar.hideTooltip(root)
   }
 
@@ -150,13 +159,26 @@ BarWidget {
             anchors.fill: parent
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
-            source: root.radio && root.radio.bigArtUrl ? root.radio.bigArtUrl : ""
+            // sourceSize keeps the decode proportional to the 88px slot (Qt
+            // only ever downscales, and preserves the aspect ratio). It is not
+            // a hard memory bound — PNG decodes at full size before scaling —
+            // so the real limit is that the source is only ever an https URL
+            // on a Newgrounds host, vetted by the service.
+            sourceSize.width: Style.space(176)
+            sourceSize.height: Style.space(176)
+            // Bound to the popup: otherwise every status update fetches art on
+            // every monitor's bar with the UI closed, which lets the feed pick
+            // both when the shell makes a request and what path it asks for.
+            source: root.popupOpen && root.radio && root.radio.bigArtUrl
+              ? root.radio.bigArtUrl : ""
             visible: status === Image.Ready
           }
 
           Text {
             anchors.centerIn: parent
-            visible: !root.radio || !root.radio.bigArtUrl || artImage.status === Image.Error
+            // Covers no-service, no-art, error, and - now that the fetch
+            // starts when the popup opens - the load window too.
+            visible: artImage.status !== Image.Ready
             text: "󰝚"
             color: root.bar.foreground
             font.family: root.bar.fontFamily
@@ -197,6 +219,7 @@ BarWidget {
 
           Text {
             text: root.title || "Tuning in…"
+            textFormat: Text.PlainText
             color: root.bar.foreground
             font.family: root.bar.fontFamily
             font.pixelSize: Style.font.subtitle
@@ -218,6 +241,7 @@ BarWidget {
 
           Text {
             text: root.artist
+            textFormat: Text.PlainText
             color: Qt.darker(root.bar.foreground, 1.3)
             font.family: root.bar.fontFamily
             font.pixelSize: Style.font.bodySmall
@@ -239,6 +263,7 @@ BarWidget {
 
           Text {
             text: root.radio ? root.radio.genre : ""
+            textFormat: Text.PlainText
             color: Qt.darker(root.bar.foreground, 1.6)
             font.family: root.bar.fontFamily
             font.pixelSize: Style.font.caption
@@ -356,6 +381,7 @@ BarWidget {
 
               Text {
                 text: root.logTime(modelData.on_air_at)
+                textFormat: Text.PlainText
                 color: Qt.darker(root.bar.foreground, 1.6)
                 font.family: root.bar.fontFamily
                 font.pixelSize: Style.font.caption
@@ -366,6 +392,7 @@ BarWidget {
                 width: parent.width - Style.space(48)
                 text: String(modelData.title || "")
                   + (modelData.artist ? "  ·  " + modelData.artist : "")
+                textFormat: Text.PlainText
                 color: root.bar.foreground
                 font.family: root.bar.fontFamily
                 font.pixelSize: Style.font.bodySmall
