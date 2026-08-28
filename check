@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Lint the QML and run the RadioLogic tests. Used by .githooks/pre-commit.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+runner=/usr/lib/qt6/bin/qmltestrunner
+omarchy-plugin-lint . && omarchy-plugin-lint tests
+
+if [[ -x $runner ]]; then
+  # Offscreen so the suite runs headless, in a hook, over ssh.
+  QT_QPA_PLATFORM=offscreen "$runner" -input tests/
+else
+  echo "qmltestrunner not found at $runner (install qt6-declarative); skipping tests" >&2
+fi

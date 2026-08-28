@@ -92,9 +92,14 @@ enable a custom hooks path automatically, so run this once per clone:
 git config core.hooksPath .githooks
 ```
 
-`pre-commit` then runs `omarchy-plugin-lint` (qmllint with the shell's import
-root wired up) over any staged `.qml` and blocks the commit on a real finding.
-If the linter isn't installed the hook skips rather than fails.
+`pre-commit` then runs `./check` — qmllint plus the `RadioLogic` test suite —
+and blocks the commit on a real finding. If the linter isn't installed the
+hook skips rather than fails.
+
+`./check` is also the way to run things by hand. The pure feed-handling logic
+lives in `RadioLogic.js` so it can be tested without the shell: Quickshell's
+QML modules are compiled into the `quickshell` binary, so `qmltestrunner`
+cannot load anything that imports them.
 
 ## License
 

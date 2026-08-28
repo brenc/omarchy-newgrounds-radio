@@ -8,15 +8,12 @@ README.md — this file covers what the code alone won't tell you.
 ## Verify before you commit
 
 ```bash
-omarchy-plugin-lint .            # qmllint with the shell's import root wired up
+./check          # qmllint + the RadioLogic test suite
 ```
 
-`.githooks/pre-commit` runs this on staged `.qml`. There is no test suite:
-`Service.qml` can't be instantiated outside the shell (Quickshell singletons,
-a live `Process`, a real WebSocket), so lint plus a real run is the loop.
-
-To actually see a change: `omarchy restart shell`. The plugin is loaded from
-this directory in place, so no install step.
+`.githooks/pre-commit` runs it on any staged `.qml`/`.js`. To see a change in
+the real shell: `omarchy restart shell` (the plugin loads from this directory
+in place, so there is no install step).
 
 Expect three qmllint categories to stay suppressed — they're inherent to the
 plugin contract, not bugs to fix:
@@ -26,6 +23,34 @@ plugin contract, not bugs to fix:
 - `signal-handler-parameters` — `Process.onExited` declares a
   `QProcess::ExitStatus` parameter that Quickshell registers nowhere as a
   QML-visible type, so no import resolves it. Don't try to "fix" the handler.
+
+## What can and can't be tested
+
+Quickshell's QML modules are compiled into the `quickshell` binary as `qrc:`
+resources — the on-disk `/usr/lib/qt6/qml/Quickshell/` tree is `qmldir` plus
+`.qmltypes` metadata only, with no plugin `.so`. qmllint reads that metadata
+statically and works fine, but **no external Qt tool can instantiate anything
+that imports Quickshell**; `qmltestrunner` fails with `plugin
+"quickshell-coreplugin" not found`. Only the shell itself can load
+`Service.qml` or `BarWidget.qml`.
+
+So the pure feed-handling logic lives in `RadioLogic.js`, which imports
+nothing, and `tests/tst_radiologic.qml` exercises it directly. This matches
+the host shell's own convention (`plugins/notifications/NotificationLogic.js`
+and ~20 other `*Model.js` files).
+
+Keep logic testable by keeping it pure: pass the clock in as an argument and
+thread mutable bookkeeping through a caller-owned state object, the way
+`safeUrlLogged` takes `(url, st, now, warn)`. That is what makes the rate
+floors assertable instead of wall-clock dependent.
+
+Untested by construction: everything touching `bar`/`Style`, the reconnect and
+restart timers, `applyStatusData`'s property writes, and all rendering.
+
+When adding a bound, check the test actually detects its removal. A cap whose
+only effect is on work done — `maxPlayLogScan` — is invisible to output
+assertions unless the fixture puts valid entries past the bound, which is what
+`test_playlog_scan_bound_stops_the_walk` does.
 
 ## Host contract
 

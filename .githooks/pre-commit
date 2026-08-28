@@ -3,20 +3,22 @@
 #   git config core.hooksPath .githooks
 set -euo pipefail
 
-mapfile -t staged < <(git diff --cached --name-only --diff-filter=ACM -- '*.qml')
+mapfile -t staged < <(git diff --cached --name-only --diff-filter=ACM -- '*.qml' '*.js')
 (( ${#staged[@]} )) || exit 0
 
 if ! command -v omarchy-plugin-lint >/dev/null; then
-  echo "pre-commit: omarchy-plugin-lint not found, skipping QML lint" >&2
+  echo "pre-commit: omarchy-plugin-lint not found, skipping QML checks" >&2
   exit 0
 fi
 
-# The linter reads the worktree, not the index, so a partially staged file is
-# checked as it exists on disk. Say so rather than lint the wrong bytes.
+# The checks read the worktree, not the index, so a partially staged file is
+# checked as it exists on disk. Say so rather than check the wrong bytes.
 for f in "${staged[@]}"; do
   if ! git diff --quiet -- "$f"; then
-    echo "pre-commit: $f has unstaged changes; linting the worktree copy" >&2
+    echo "pre-commit: $f has unstaged changes; checking the worktree copy" >&2
   fi
 done
 
-omarchy-plugin-lint "${staged[@]}"
+# Any staged .qml/.js can affect RadioLogic or its callers, so run the whole
+# check rather than linting just the touched files.
+exec ./check
