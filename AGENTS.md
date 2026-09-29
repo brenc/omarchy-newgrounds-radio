@@ -66,8 +66,8 @@ assertions unless the fixture puts valid entries past the bound, which is what
 ## Treat the feed as untrusted
 
 The status feed is network input rendered by a long-lived shell process, and
-the hardening in `Service.qml` is deliberate. When touching anything that
-reads a feed field, keep these invariants:
+the hardening in `RadioLogic.js` (called from `Service.qml`) is deliberate.
+When touching anything that reads a feed field, keep these invariants:
 
 - Every string goes through `sanitizeText()` (control + bidi/zero-width
   strips, length cap) before it is stored or rendered.
