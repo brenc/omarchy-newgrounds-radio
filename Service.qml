@@ -1,5 +1,4 @@
 import QtQuick
-import QtWebSockets
 import Quickshell
 import Quickshell.Io
 import "RadioLogic.js" as RadioLogic
@@ -7,9 +6,10 @@ import "RadioLogic.js" as RadioLogic
 // Newgrounds Radio service: owns the mpv playback process and the status
 // feed, so bar widgets on every monitor share one stream and one connection.
 //
-// Status arrives in realtime over the station's socket.io endpoint (a
-// minimal Engine.IO v4 client over WebSocket), which pushes a full status
-// on connect and on every change — no polling needed.
+// Status arrives in realtime from the station's socket.io endpoint, which
+// pushes a full status on connect and on every change. The client speaks
+// Engine.IO v4 long-polling through curl subprocesses, so every response is
+// size-capped by curl before any of it reaches this long-lived process.
 Item {
   id: root
 
@@ -22,7 +22,6 @@ Item {
   // Set while mpv is being stopped only to relaunch on a new stream URL, so
   // onExited restarts at once instead of counting it as a dropped stream.
   property bool switchingStream: false
-  property string socketUrl: "wss://api.newgroundsradio.com/socket.io/?EIO=4&transport=websocket"
   property bool notifyOnTrackChange: true
 
   property bool wantPlaying: false
@@ -42,8 +41,8 @@ Item {
   property int skipVotes: 0
   property int skipThreshold: 0
   property var playLog: []
-  property bool socketConnected: false
-  property double lastSocketMessageAt: Date.now()
+  property bool feedConnected: false
+  property double lastFeedAt: Date.now()
   property double lastNotifyAt: 0
 
   readonly property string listenUrl: audioId > 0
@@ -138,6 +137,39 @@ Item {
     artFetch.running = true
   }
 
+  // A Process whose exit code and complete stdout are delivered together by
+  // settled(). Quickshell reports the two separately, in an order it
+  // doesn't document (0.3.1 happens to finish stdout first), so this waits
+  // for both before either is acted on.
+  component CollectedProcess: Process {
+    id: proc
+    property bool exitSeen: false
+    property bool streamSeen: false
+    property int exitCode: -1
+    signal settled(int exitCode, string out)
+
+    function launch(argv) {
+      exitSeen = false
+      streamSeen = false
+      command = argv
+      running = true
+    }
+    function trySettle() {
+      if (exitSeen && streamSeen) settled(exitCode, collector.text)
+    }
+
+    stdout: StdioCollector {
+      id: collector
+      waitForEnd: true
+      onStreamFinished: { proc.streamSeen = true; proc.trySettle() }
+    }
+    onExited: function(code) {
+      proc.exitCode = code
+      proc.exitSeen = true
+      proc.trySettle()
+    }
+  }
+
   Process {
     id: artFetch
     property var track: null
@@ -149,72 +181,142 @@ Item {
     }
   }
 
-  // ---- Realtime feed. RadioLogic.classifyFrame owns the Engine.IO v4
-  // framing; this only acts on the classification. An oversize frame
-  // classifies as "oversize" and is deliberately dropped without a reply.
-  function handleSocketMessage(message) {
-    lastSocketMessageAt = Date.now()
-    var f = RadioLogic.classifyFrame(message)
-    if (f.kind === "open") { socket.sendTextMessage("40"); return }
-    if (f.kind === "ping") { socket.sendTextMessage("3"); return }
-    if (f.kind === "connected") {
-      if (!socketConnected) console.log("newgrounds radio: realtime socket connected")
-      socketConnected = true
+  // ---- Realtime feed: Engine.IO v4 long-polling, one curl per request.
+  // RadioLogic owns the framing, argv and response cap; this only runs the
+  // loop. feedPhase is "backoff" (waiting out reconnectTimer), "handshake",
+  // "join" (POST "40" in flight) or "poll". Every failure - HTTP error,
+  // unknown sid, timeout, oversize response, close or kick - drops the
+  // session and waits out the backoff, so nothing retries hot.
+  property string feedPhase: "backoff"
+  property string feedSid: ""
+  property double lastPollAt: 0
+
+  function startFeed() {
+    // A torn-down request may still be exiting; its settle would be ignored,
+    // but one Process can't run two requests, so wait another round.
+    if (feedGet.running || feedPost.running) { reconnectTimer.restart(); return }
+    feedSid = ""
+    feedPhase = "handshake"
+    lastFeedAt = Date.now()
+    feedGet.launch(RadioLogic.feedGetArgv(""))
+  }
+
+  function failFeed() {
+    if (feedPhase === "backoff") return
+    if (feedConnected) console.log("newgrounds radio: realtime feed lost")
+    feedConnected = false
+    feedSid = ""
+    feedPhase = "backoff"
+    pollTimer.stop()
+    feedGet.running = false
+    feedPost.running = false
+    reconnectTimer.restart()
+  }
+
+  function pollFeed() {
+    var argv = RadioLogic.feedGetArgv(feedSid)
+    if (!argv) { failFeed(); return }
+    lastPollAt = Date.now()
+    feedGet.launch(argv)
+  }
+
+  function postFeed(packet) {
+    var argv = RadioLogic.feedPostArgv(feedSid, packet)
+    // A pong still in flight 25s after the last one is a stalled session.
+    if (!argv || feedPost.running) { failFeed(); return }
+    feedPost.packet = packet
+    feedPost.launch(argv)
+  }
+
+  function handleHandshake(exitCode, body) {
+    var r = RadioLogic.pollResult(exitCode, body)
+    var sid = r.ok ? RadioLogic.parseHandshake(r.packets[0]) : ""
+    if (!sid) { failFeed(); return }
+    lastFeedAt = Date.now()
+    feedSid = sid
+    feedPhase = "join"
+    postFeed("40")
+  }
+
+  function handlePoll(exitCode, body) {
+    var r = RadioLogic.pollResult(exitCode, body)
+    if (!r.ok) {
+      if (r.oversize) console.warn("newgrounds radio: dropped oversize feed response")
+      failFeed()
       return
     }
-    if (f.kind === "reconnect") { reconnectSocket(); return }
-    if (f.kind === "status") {
+    lastFeedAt = Date.now()
+    for (var i = 0; i < r.packets.length; i++) {
+      if (!handlePacket(r.packets[i])) { failFeed(); return }
+    }
+    var wait = RadioLogic.pollDelay(Date.now(), lastPollAt)
+    if (wait > 0) { pollTimer.interval = wait; pollTimer.restart() }
+    else pollFeed()
+  }
+
+  // Acts on one packet; false means the session is over.
+  function handlePacket(message) {
+    var f = RadioLogic.classifyFrame(message)
+    if (f.kind === "ping") { postFeed("3"); return feedPhase === "poll" }
+    if (f.kind === "reconnect") return false
+    if (f.kind === "connected") {
+      if (!feedConnected) console.log("newgrounds radio: realtime feed connected")
+      feedConnected = true
+    } else if (f.kind === "status") {
       var now = Date.now()
       if (Array.isArray(f.packet.play_log))
         root.playLog = RadioLogic.sanitizePlayLog(f.packet.play_log, root.urlWarnState,
                                                   now, root.warnRejectedUrl)
       if (f.packet.currently_playing) applyStatusData(f.packet.currently_playing)
     }
+    return true
   }
 
-  function reconnectSocket() {
-    socketConnected = false
-    socket.active = false
-    reconnectTimer.restart()
+  CollectedProcess {
+    id: feedGet
+    onSettled: function(exitCode, out) {
+      if (root.feedPhase === "handshake") root.handleHandshake(exitCode, out)
+      else if (root.feedPhase === "poll") root.handlePoll(exitCode, out)
+    }
   }
 
-  WebSocket {
-    id: socket
-    url: root.socketUrl
-    active: true
-    onTextMessageReceived: function(message) { root.handleSocketMessage(message) }
-    onStatusChanged: {
-      if (socket.status === WebSocket.Open) {
-        // Start the silence clock from the transport opening, so a server
-        // that never completes the Engine.IO handshake still gets reaped.
-        root.lastSocketMessageAt = Date.now()
-      } else if (socket.status === WebSocket.Closed || socket.status === WebSocket.Error) {
-        root.socketConnected = false
-        reconnectTimer.restart()
+  // POSTs write their "ok" to /dev/null, so only the exit code matters.
+  CollectedProcess {
+    id: feedPost
+    property string packet: ""
+    onSettled: function(exitCode) {
+      if (root.feedPhase === "backoff") return
+      if (exitCode !== 0) { root.failFeed(); return }
+      if (packet === "40" && root.feedPhase === "join") {
+        root.feedPhase = "poll"
+        root.pollFeed()
       }
     }
   }
 
   Timer {
-    id: reconnectTimer
-    interval: 5000
-    onTriggered: {
-      if (root.socketConnected) return
-      socket.active = false
-      socket.active = true
-    }
+    id: pollTimer
+    onTriggered: if (root.feedPhase === "poll") root.pollFeed()
   }
 
-  // The server pings every 25s; a 60s silence means the connection died
-  // without a proper close (sleep/resume, network drop) or never completed
-  // its handshake. Gated on the transport, not socketConnected, so a
-  // half-open initial connection is also reaped.
+  Timer {
+    id: reconnectTimer
+    interval: 5000
+    onTriggered: root.startFeed()
+  }
+
+  Component.onCompleted: startFeed()
+
+  // The server pings every 25s and curl caps each request, so a 60s silence
+  // means the loop wedged somewhere curl's timeouts don't reach
+  // (sleep/resume, a request that never settled) or never finished its
+  // handshake.
   Timer {
     interval: 60000
-    running: socket.status === WebSocket.Open || socket.status === WebSocket.Connecting
+    running: root.feedPhase !== "backoff"
     repeat: true
     onTriggered: {
-      if (Date.now() - root.lastSocketMessageAt > 60000) root.reconnectSocket()
+      if (Date.now() - root.lastFeedAt > 60000) root.failFeed()
     }
   }
 

@@ -232,20 +232,122 @@ function trackNotifyArgv(t, artUrl) {
     "0", String(hints.length / 3)].concat(hints, ["-1"])
 }
 
-// ---- Realtime feed: minimal Engine.IO v4 framing over WebSocket.
-//   "0{...}"  open handshake  -> reply "40" to join the default namespace
+// ---- Realtime feed: minimal Engine.IO v4 client over the polling
+// transport, one curl per request. A long-poll GET is held open by the server
+// until it has something to send, so status still arrives in realtime.
+//   GET  (no sid)  -> "0{sid,...}" handshake
+//   POST "40"      -> join the default namespace
+//   GET  &sid=...  -> one or more packets separated by \x1e (see below)
+//   POST "3"       -> answer a server ping
+//
+// curl, not QML, enforces the response cap: --max-filesize aborts a transfer
+// mid-stream once it passes maxResponseBytes (even with no Content-Length)
+// and exits non-zero, so an oversize body is discarded after the shell has
+// buffered at most the cap. A real response holds a namespace ack, a status
+// (a few KiB) and perhaps a ping; room for two packets at the per-packet cap
+// is ample, and classifyFrame still drops any single packet over it.
+var feedEndpoint = "https://api.newgroundsradio.com/socket.io/?EIO=4&transport=polling"
+var maxResponseBytes = 2 * maxMessageLength
+var maxSidLength = 64
+// Seconds. The server holds a GET for up to its ping interval (25s) before
+// answering with a ping; the long-poll cap sits above that, and still ends a
+// stalled request. Handshake and POSTs answer at once.
+var feedPollMaxTime = 45
+var feedRequestMaxTime = 10
+var feedPostPackets = ["40", "3"]
+// A real long-poll is held until there is news, but a server answering
+// every GET at once would otherwise turn the loop into back-to-back curl
+// spawns. Packets sent in the gap wait on the server for the next GET.
+var minPollInterval = 1000
+
+// Milliseconds to wait before the next GET, given when the last one started.
+// A backwards clock correction means no wait rather than a stuck loop.
+function pollDelay(now, lastPollAt) {
+  var elapsed = now - lastPollAt
+  return elapsed < 0 || elapsed >= minPollInterval ? 0 : minPollInterval - elapsed
+}
+
+// A session id from the network ends up in a URL, so it must look like one
+// socket.io issues (base64url, 20 chars today) and nothing more.
+function validSid(sid) {
+  return typeof sid === "string" && sid.length <= maxSidLength
+    && /^[A-Za-z0-9_-]+$/.test(sid)
+}
+
+function feedUrl(sid) {
+  return sid ? feedEndpoint + "&sid=" + sid : feedEndpoint
+}
+
+// Shared curl options: no ~/.curlrc (-q), https only, no redirects, bounded
+// connect and total time. Every argument is a fixed string or a validated
+// sid, and there is no shell in between.
+function feedCurlBase(maxTime) {
+  return ["curl", "-q", "-fsS", "--proto", "=https", "--connect-timeout", "5",
+          "--max-time", String(maxTime)]
+}
+
+// A handshake (sid "") or long-poll GET, body to stdout. Returns null for an
+// invalid sid rather than a request carrying it.
+function feedGetArgv(sid) {
+  if (sid && !validSid(sid)) return null
+  return feedCurlBase(sid ? feedPollMaxTime : feedRequestMaxTime).concat(
+    ["--max-filesize", String(maxResponseBytes), "--", feedUrl(sid)])
+}
+
+// A POST of one of the fixed client packets. The server answers "ok", which
+// nothing needs, so the body goes to /dev/null rather than into the shell.
+// Only the packets in feedPostPackets are sent; anything else is null.
+function feedPostArgv(sid, packet) {
+  if (!validSid(sid) || feedPostPackets.indexOf(packet) === -1) return null
+  return feedCurlBase(feedRequestMaxTime).concat(
+    ["-o", "/dev/null", "-H", "Content-Type: text/plain;charset=UTF-8",
+     "--data-binary", packet, "--", feedUrl(sid)])
+}
+
+// Polling bodies batch packets separated by the record separator.
+function splitPayload(body) {
+  return String(body === undefined || body === null ? "" : body).split("\x1e")
+}
+
+// A finished GET, as {ok, packets}. Anything but a clean exit - curl's
+// size-cap abort (63), an HTTP error such as an unknown sid (22), a timeout -
+// is a failure whose partial body is never parsed. The length test repeats
+// the cap in case curl ever lets one through.
+function pollResult(exitCode, body) {
+  var s = String(body === undefined || body === null ? "" : body)
+  if (exitCode !== 0) return { ok: false, oversize: exitCode === 63, packets: [] }
+  if (s.length > maxResponseBytes) return { ok: false, oversize: true, packets: [] }
+  return { ok: true, oversize: false, packets: splitPayload(s) }
+}
+
+// The session id from a handshake response, or "" to reject it. The server's
+// pingInterval/pingTimeout are ignored: the timeouts above are constants.
+function parseHandshake(body) {
+  var first = splitPayload(body)[0]
+  if (first.length > maxMessageLength || first.charAt(0) !== "0") return ""
+  try {
+    var open = JSON.parse(first.substring(1))
+    if (open && validSid(open.sid)) return open.sid
+  } catch (e) {}
+  return ""
+}
+
+// One Engine.IO packet from a poll response:
+//   "0{...}"  open handshake  -> only expected from the handshake GET
 //   "40..."   namespace ack   -> connected
 //   "2"       server ping     -> reply "3"
 //   "42[...]" event           -> ["status", {currently_playing, play_log}]
-//   "41"      namespace kick  -> reconnect
+//   "1"       transport close -> reconnect
+//   "41"/"44" namespace kick  -> reconnect
 //
-// Returns {kind, packet}. A frame larger than the cap is never a real status
+// Returns {kind, packet}. A packet larger than the cap is never a real status
 // update, so it is dropped rather than parsed into the shell.
 function classifyFrame(message) {
   var m = String(message)
   if (m.length > maxMessageLength) return { kind: "oversize" }
   if (m.charAt(0) === "0") return { kind: "open" }
   if (m === "2") return { kind: "ping" }
+  if (m === "1") return { kind: "reconnect" }
   var head = m.substring(0, 2)
   if (head === "40") return { kind: "connected" }
   if (head === "41" || head === "44") return { kind: "reconnect" }

@@ -236,6 +236,103 @@ TestCase {
     compare(argv.slice(3), ["--", "/c", "7", "https://a.ngfiles.com/$(x)", "5242880"])
     verify(argv[2].indexOf("ngfiles") === -1)
     verify(argv[2].indexOf(" -L") === -1)
+    verify(argv[2].indexOf("--proto =https") !== -1)
+    verify(argv[2].indexOf("--max-filesize \"$4\"") !== -1)
+  }
+  // curl writes only inside a fresh mktemp -d directory, never to a fixed
+  // name in the cache dir where a symlink could be waiting.
+  function test_sid_validation() {
+    verify(RadioLogic.validSid("3DevBcH9vq1QjgBaAAKC"))
+    verify(RadioLogic.validSid("eefabnIG-YCL9ArMAAJp"))
+    verify(!RadioLogic.validSid(""))
+    verify(!RadioLogic.validSid("a&b"))
+    verify(!RadioLogic.validSid("a b"))
+    verify(!RadioLogic.validSid("a/../b"))
+    verify(!RadioLogic.validSid(42))
+    var long = ""
+    for (var i = 0; i < 65; i++) long += "a"
+    verify(!RadioLogic.validSid(long))
+    verify(RadioLogic.validSid(long.substring(1)))
+  }
+  function test_handshake_parse() {
+    compare(RadioLogic.parseHandshake('0{"sid":"3DevBcH9vq1QjgBaAAKC","pingInterval":25000}'),
+            "3DevBcH9vq1QjgBaAAKC")
+    compare(RadioLogic.parseHandshake('0{"sid":"x&y=z"}'), "")
+    compare(RadioLogic.parseHandshake('0{"sid":7}'), "")
+    compare(RadioLogic.parseHandshake('0{bad json'), "")
+    compare(RadioLogic.parseHandshake('40{"sid":"abc"}'), "")
+    compare(RadioLogic.parseHandshake(""), "")
+  }
+  function test_handshake_rejects_oversize_packet() {
+    // Valid apart from its length, so only the size cap can reject it.
+    var pad = new Array(RadioLogic.maxMessageLength + 1).join("x")
+    compare(RadioLogic.parseHandshake('0{"sid":"abc","pad":"' + pad + '"}'), "")
+  }
+  function test_payload_splits_on_record_separator() {
+    compare(RadioLogic.splitPayload('40{"sid":"a"}\x1e42["status",{}]\x1e2'),
+            ['40{"sid":"a"}', '42["status",{}]', "2"])
+    compare(RadioLogic.splitPayload("2"), ["2"])
+  }
+  function test_feed_get_argv_shape_and_caps() {
+    var argv = RadioLogic.feedGetArgv("abc_DEF-1")
+    compare(argv[0], "curl")
+    compare(argv[1], "-q")
+    compare(argv[argv.indexOf("--proto") + 1], "=https")
+    compare(argv[argv.indexOf("--max-filesize") + 1], String(RadioLogic.maxResponseBytes))
+    compare(argv[argv.indexOf("--max-time") + 1], "45")
+    verify(argv.indexOf("--connect-timeout") !== -1)
+    verify(argv.indexOf("-L") === -1 && argv.indexOf("--location") === -1)
+    compare(argv.slice(-2), ["--", RadioLogic.feedEndpoint + "&sid=abc_DEF-1"])
+    var hs = RadioLogic.feedGetArgv("")
+    compare(hs[hs.indexOf("--max-time") + 1], "10")
+    compare(hs[hs.indexOf("--max-filesize") + 1], String(RadioLogic.maxResponseBytes))
+    compare(hs[hs.length - 1], RadioLogic.feedEndpoint)
+    compare(RadioLogic.feedGetArgv("a&b"), null)
+  }
+  // Long enough for a batch of full-size packets, not a lot more.
+  function test_response_cap_relative_to_packet_cap() {
+    verify(RadioLogic.maxResponseBytes >= RadioLogic.maxMessageLength)
+    verify(RadioLogic.maxResponseBytes <= 4 * RadioLogic.maxMessageLength)
+    verify(RadioLogic.feedPollMaxTime > 25)
+  }
+  function test_poll_delay_floors_back_to_back_polls() {
+    compare(RadioLogic.pollDelay(100000, 100000), 1000)
+    compare(RadioLogic.pollDelay(100400, 100000), 600)
+    compare(RadioLogic.pollDelay(101000, 100000), 0)
+    compare(RadioLogic.pollDelay(125000, 100000), 0)
+    compare(RadioLogic.pollDelay(1000, 900000), 0)
+  }
+  function test_feed_post_argv_fixed_bodies_only() {
+    var argv = RadioLogic.feedPostArgv("abc", "3")
+    compare(argv[argv.indexOf("--data-binary") + 1], "3")
+    compare(argv[argv.indexOf("-o") + 1], "/dev/null")
+    compare(argv[argv.indexOf("--proto") + 1], "=https")
+    compare(argv.slice(-2), ["--", RadioLogic.feedEndpoint + "&sid=abc"])
+    compare(RadioLogic.feedPostArgv("abc", "40")[argv.indexOf("--data-binary") + 1], "40")
+    compare(RadioLogic.feedPostArgv("abc", "@/etc/passwd"), null)
+    compare(RadioLogic.feedPostArgv("", "3"), null)
+    compare(RadioLogic.feedPostArgv("a b", "3"), null)
+  }
+  function test_poll_result_failures_are_never_parsed() {
+    var over = RadioLogic.pollResult(63, '42["status",{}]')
+    compare(over.ok, false)
+    compare(over.oversize, true)
+    compare(over.packets.length, 0)
+    compare(RadioLogic.pollResult(22, "").ok, false)
+    compare(RadioLogic.pollResult(28, "2").packets.length, 0)
+    var ok = RadioLogic.pollResult(0, "2\x1e40")
+    compare(ok.ok, true)
+    compare(ok.packets, ["2", "40"])
+  }
+  // A clean exit with too much output (curl letting one through) is still
+  // an oversize failure. Fails if pollResult's length check is removed.
+  function test_poll_result_rejects_over_cap_body() {
+    var big = ""
+    while (big.length <= RadioLogic.maxResponseBytes) big += "xxxxxxxxxxxxxxxx"
+    var r = RadioLogic.pollResult(0, big)
+    compare(r.ok, false)
+    compare(r.oversize, true)
+    compare(r.packets.length, 0)
   }
 
   // ---- classifyFrame
@@ -245,6 +342,7 @@ TestCase {
     compare(RadioLogic.classifyFrame("40").kind, "connected")
     compare(RadioLogic.classifyFrame("41").kind, "reconnect")
     compare(RadioLogic.classifyFrame("44").kind, "reconnect")
+    compare(RadioLogic.classifyFrame("1").kind, "reconnect")
   }
   function test_frame_status_payload_extracted() {
     var f = RadioLogic.classifyFrame('42["status",{"currently_playing":{"title":"T"}}]')

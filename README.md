@@ -2,7 +2,7 @@
 
 Listen to [Newgrounds Radio](https://www.newgroundsradio.com) straight from the
 [Omarchy](https://omarchy.org) bar — realtime now-playing info, album art,
-listener stats, and a play history, with no polling.
+listener stats, and a play history, pushed the moment they change.
 
 The official Newgrounds Radio client for Omarchy, from the team that runs the
 station.
@@ -20,16 +20,15 @@ station.
 - Opus / MP3 stream picker in the popup — switching mid-song reconnects
   on the spot
 - Realtime updates over the station's socket.io feed (a tiny Engine.IO v4
-  client over WebSockets — no REST polling), with automatic reconnect
-- One shared mpv stream and one socket connection, no matter how many
+  long-polling client built on `curl`), with automatic reconnect
+- One shared mpv stream and one feed connection, no matter how many
   monitors your bar spans
 
 ## Install
 
-Requires `mpv` (included with Omarchy) and `qt6-websockets`:
+Requires `mpv` and `curl`, both included with Omarchy:
 
 ```bash
-omarchy pkg add qt6-websockets
 omarchy plugin add https://github.com/brenc/omarchy-newgrounds-radio.git --enable
 ```
 
@@ -43,12 +42,13 @@ omarchy plugin remove brenc.newgrounds-radio
 ```
 
 That removes the plugin and its bar widget. Besides the current track's cover
-art (a single file in the shell's cache directory, under `newgrounds-radio/`),
+art (one small file in the shell's cache directory, under
+`newgrounds-radio/`),
 the plugin never writes outside its own entry in
 `~/.config/omarchy/shell.json`; if you added an optional
 `trackNotifications` or `codec` override there (see [Usage](#usage)), remove that entry by
-hand. `qt6-websockets` is left installed — remove it with
-`omarchy pkg drop qt6-websockets` if nothing else needs it.
+hand. Versions up to 1.2.0 needed `qt6-websockets`; if you installed it
+only for this plugin, `omarchy pkg drop qt6-websockets` removes it.
 
 ## Usage
 
@@ -78,11 +78,14 @@ session; the setting decides what the shell starts with.
 
 - `Service.qml` (a singleton shell service) owns the mpv process for
   the station stream (`radio.opus` or `radio.mp3` on
-  <https://stream.newgroundsradio.com>) and a WebSocket connection to
-  the station's socket.io endpoint, which pushes a full status — current
-  track, listeners, skip votes, play log — on connect and on every change.
-  Playback auto-reconnects if the stream drops; the socket reconnects with a
-  watchdog for silent connection deaths (suspend/resume, network drops).
+  <https://stream.newgroundsradio.com>) and a connection to the station's
+  socket.io endpoint, which pushes a full status — current track,
+  listeners, skip votes, play log — on connect and on every change. The feed
+  uses Engine.IO long-polling: each request is a `curl` the server holds open
+  until it has news, and curl caps the size of every response before the
+  shell sees it. Playback auto-reconnects if the stream drops; the feed
+  reconnects with a watchdog for silent connection deaths (suspend/resume,
+  network drops).
 - `BarWidget.qml` renders the bar pill and popup on each monitor, all reading
   the one shared service.
 
@@ -91,8 +94,15 @@ it as-is.
 
 ## Troubleshooting
 
-If the widget doesn't appear in the bar at all, the most likely cause is a
-missing `qt6-websockets` — install it and run `omarchy restart shell`.
+If the widget doesn't appear in the bar at all, add it from the bar settings
+or run `omarchy restart shell`.
+
+If the popup never shows a track, the feed can't reach the station. Check
+that this prints a line starting with `0{"sid"`:
+
+```bash
+curl -sS 'https://api.newgroundsradio.com/socket.io/?EIO=4&transport=polling'
+```
 
 ## Development
 
@@ -124,7 +134,7 @@ separately, and streams from Newgrounds' own servers:
 | Dependency | Role | License |
 |---|---|---|
 | [`mpv`](https://mpv.io) (ships with Omarchy) | Plays the audio stream | GPL-2.0-or-later / LGPL-2.1-or-later |
-| [`qt6-websockets`](https://doc.qt.io/qt-6/qtwebsockets-index.html) | QML WebSocket type for the realtime feed | LGPL-3.0 / GPL-3.0 (Qt open-source terms) |
+| [`curl`](https://curl.se) (ships with Omarchy) | Realtime feed requests and cover-art downloads | curl (MIT-style) |
 | [Quickshell](https://quickshell.org) (via Omarchy) | Shell/QML runtime hosting the widget | LGPL-3.0 |
 
 Audio, artwork, and track metadata are served by

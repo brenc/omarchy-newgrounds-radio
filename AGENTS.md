@@ -48,7 +48,9 @@ thread mutable bookkeeping through a caller-owned state object, the way
 floors assertable instead of wall-clock dependent.
 
 Untested by construction: everything touching `bar`/`Style`, the reconnect and
-restart timers, `applyStatusData`'s property writes, and all rendering.
+restart timers, the feed loop's sequencing in `Service.qml`,
+`applyStatusData`'s property writes, and all rendering. The feed's argv,
+framing, handshake parsing and response-cap handling are pure and tested.
 
 When adding a bound, check the test actually detects its removal. A cap whose
 only effect is on work done — `maxPlayLogScan` — is invisible to output
@@ -72,6 +74,20 @@ The status feed is network input rendered by a long-lived shell process, and
 the hardening in `RadioLogic.js` (called from `Service.qml`) is deliberate.
 When touching anything that reads a feed field, keep these invariants:
 
+- The size cap is enforced at the subprocess boundary, not after QML has
+  buffered a message. The feed is Engine.IO v4 long-polling over `curl`
+  (handshake GET, POST `40`, then one long-poll GET at a time, POST `3` per
+  server ping), and every GET carries `--max-filesize maxResponseBytes`.
+  curl 8.22 aborts an unknown-length body mid-transfer at the cap with exit
+  63, so a failed exit's partial body is discarded unparsed (`pollResult`)
+  and the session backs off 5s before re-handshaking. `classifyFrame`'s
+  per-packet `maxMessageLength` check stays as a second line. Don't go back
+  to the QML `WebSocket` type: it has no receive-size limit.
+- The session id is validated (`validSid`) before it goes into a URL; POST
+  bodies are the fixed packets in `feedPostArgv`, never feed data.
+  GETs start at least `minPollInterval` apart, so a server that answers
+  every poll at once can't turn the loop into back-to-back curl spawns.
+
 - Every string goes through `sanitizeText()` (control + bidi/zero-width
   strips, length cap) before it is stored or rendered.
 - Every URL goes through `safeUrl()` — https only, on an allow-listed
@@ -94,6 +110,12 @@ is the one exception: the shared service downloads the art once per notified
 track (so behind the same playing/enabled/rate-floor gate), with curl pinned
 to https, no redirects, and a size and time cap. A failed fetch still sends
 the toast, just without art.
+
+`Process` reports its exit code and its collected stdout as separate
+signals in an order Quickshell doesn't document (0.3.1 happens to finish
+stdout first), so processes that need both are `CollectedProcess` (inline
+in `Service.qml`), which emits `settled` once both have arrived. Don't
+drop it in favour of the current order.
 
 Toasts go out as a raw `Notify` call over `busctl`, not `notify-send`, so they
 can carry the host's `omarchy-exec-argv` (click opens the track) and
