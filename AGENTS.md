@@ -95,3 +95,9 @@ reads `wantPlaying` so a click during the restart backoff still means "stop".
 Restarts are capped at 5, and a 30s stretch of stable playback resets the
 budget. mpv runs with `--load-scripts=no` to keep it off MPRIS — otherwise an
 external pause desyncs the pill, which can't observe it.
+
+A codec switch kills mpv and relaunches it on the new URL; `switchingStream`
+tells `onExited` that this exit is deliberate, so it neither spends restart
+budget nor waits out the backoff. The shell.json `codec` is only applied when
+its value changes (`applyCodecSetting`), because every monitor's widget
+re-pushes settings and would otherwise undo a popup choice on hotplug.

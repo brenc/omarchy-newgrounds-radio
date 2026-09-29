@@ -184,4 +184,24 @@ TestCase {
     for (var i = 0; i < 140000; i++) big += "x"
     compare(RadioLogic.classifyFrame(big).kind, "oversize")
   }
+
+  // ---- codecs
+  function test_codec_accepts_known_values_case_insensitively() {
+    compare(RadioLogic.normalizeCodec("MP3"), "mp3")
+    compare(RadioLogic.normalizeCodec("opus"), "opus")
+  }
+  function test_codec_defaults_to_opus() {
+    compare(RadioLogic.normalizeCodec(undefined), "opus")
+    compare(RadioLogic.normalizeCodec(null), "opus")
+    compare(RadioLogic.normalizeCodec(""), "opus")
+  }
+  function test_codec_rejects_unknown_and_path_smuggle() {
+    compare(RadioLogic.normalizeCodec("flac"), "opus")
+    compare(RadioLogic.normalizeCodec("mp3/../x"), "opus")
+  }
+  function test_stream_url_per_codec() {
+    compare(RadioLogic.streamUrl("mp3"), "https://stream.newgroundsradio.com/radio.mp3")
+    compare(RadioLogic.streamUrl("opus"), "https://stream.newgroundsradio.com/radio.opus")
+    compare(RadioLogic.streamUrl("aac"), "https://stream.newgroundsradio.com/radio.opus")
+  }
 }

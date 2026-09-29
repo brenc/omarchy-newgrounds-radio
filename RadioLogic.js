@@ -27,6 +27,20 @@ var minWarnInterval = 5000
 // Newgrounds-owned; anything else is dropped rather than fetched or opened.
 var allowedHosts = ["newgrounds.com", "ngfiles.com", "newgroundsradio.com"]
 
+// Stream codecs the station serves, first entry is the default. Each maps to
+// radio.<codec> on the stream host; Opus arrives in an Ogg container.
+var codecs = ["opus", "mp3"]
+var streamBase = "https://stream.newgroundsradio.com/radio."
+
+// A codec from settings or the popup, folded to a known value. Anything
+// unrecognized falls back to the default rather than building a URL.
+function normalizeCodec(codec) {
+  var c = String(codec === undefined || codec === null ? "" : codec).toLowerCase()
+  return codecs.indexOf(c) === -1 ? codecs[0] : c
+}
+
+function streamUrl(codec) { return streamBase + normalizeCodec(codec) }
+
 // Feed strings are display-only: drop control characters and cap the length
 // before anything stores or renders them. That includes the bidi and
 // zero-width formatting controls - a title ending in U+202E can visually

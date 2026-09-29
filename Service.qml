@@ -15,7 +15,13 @@ Item {
 
   property var shell: null
 
-  property string streamUrl: "https://stream.newgroundsradio.com/radio.mp3"
+  // One of RadioLogic.codecs; always set through setCodec() so a running
+  // stream follows the change.
+  property string codec: RadioLogic.normalizeCodec("")
+  readonly property string streamUrl: RadioLogic.streamUrl(codec)
+  // Set while mpv is being stopped only to relaunch on a new stream URL, so
+  // onExited restarts at once instead of counting it as a dropped stream.
+  property bool switchingStream: false
   property string socketUrl: "wss://api.newgroundsradio.com/socket.io/?EIO=4&transport=websocket"
   property bool notifyOnTrackChange: true
 
@@ -57,6 +63,29 @@ Item {
   function toggle() {
     if (wantPlaying) stop()
     else play()
+  }
+
+  // The shell.json codec seeds the stream but doesn't pin it: every
+  // monitor's widget re-pushes its settings (on hotplug, too), so only an
+  // actual change to the configured value overrides a popup choice.
+  property string configuredCodec: ""
+
+  function applyCodecSetting(c) {
+    var next = RadioLogic.normalizeCodec(c)
+    if (next === configuredCodec) return
+    configuredCodec = next
+    setCodec(next)
+  }
+
+  // Switches the stream codec; a playing stream relaunches on the new URL.
+  function setCodec(c) {
+    var next = RadioLogic.normalizeCodec(c)
+    if (next === codec) return
+    codec = next
+    if (player.running) {
+      switchingStream = true
+      player.running = false
+    }
   }
 
   // Mutable bookkeeping for the rate-limited rejection breadcrumb, owned here
@@ -167,6 +196,11 @@ Item {
               "--force-media-title=Newgrounds Radio",
               root.streamUrl]
     onExited: function() {
+      if (root.switchingStream) {
+        root.switchingStream = false
+        if (root.wantPlaying) player.running = true
+        return
+      }
       if (!root.wantPlaying) return
       if (root.restartAttempts >= 5) {
         root.wantPlaying = false

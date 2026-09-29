@@ -48,7 +48,9 @@ BarWidget {
   onRadioChanged: syncSettings()
   onSettingsChanged: syncSettings()
   function syncSettings() {
-    if (radio) radio.notifyOnTrackChange = setting("trackNotifications", true) !== false
+    if (!radio) return
+    radio.notifyOnTrackChange = setting("trackNotifications", true) !== false
+    radio.applyCodecSetting(setting("codec", ""))
   }
 
   function logTime(iso) {
@@ -410,6 +412,49 @@ BarWidget {
               onClicked: root.openUrl(entryUrl)
             }
           }
+        }
+      }
+
+      // Two named choices, not on/off: the knob points at the active codec,
+      // and either label switches to it.
+      Row {
+        anchors.horizontalCenter: parent.horizontalCenter
+        spacing: Style.space(8)
+
+        Text {
+          readonly property bool active: root.radio && root.radio.codec === "mp3"
+          text: "MP3"
+          color: active ? root.bar.foreground : Qt.darker(root.bar.foreground, 1.6)
+          font.family: root.bar.fontFamily
+          font.pixelSize: Style.font.caption
+          font.bold: active
+          font.letterSpacing: 1
+          anchors.verticalCenter: parent.verticalCenter
+
+          HoverHandler { cursorShape: Qt.PointingHandCursor }
+          TapHandler { onTapped: if (root.radio) root.radio.setCodec("mp3") }
+        }
+
+        ToggleSwitch {
+          checked: root.radio ? root.radio.codec === "opus" : false
+          foreground: root.bar.foreground
+          accent: root.ngOrange
+          anchors.verticalCenter: parent.verticalCenter
+          onToggled: if (root.radio) root.radio.setCodec(checked ? "mp3" : "opus")
+        }
+
+        Text {
+          readonly property bool active: root.radio && root.radio.codec === "opus"
+          text: "OPUS"
+          color: active ? root.bar.foreground : Qt.darker(root.bar.foreground, 1.6)
+          font.family: root.bar.fontFamily
+          font.pixelSize: Style.font.caption
+          font.bold: active
+          font.letterSpacing: 1
+          anchors.verticalCenter: parent.verticalCenter
+
+          HoverHandler { cursorShape: Qt.PointingHandCursor }
+          TapHandler { onTapped: if (root.radio) root.radio.setCodec("opus") }
         }
       }
 

@@ -16,6 +16,8 @@ station.
 - Album art and title link to the track page; the artist links to their
   Newgrounds user page (when the artist is a single username)
 - Desktop notification on track change while you're listening
+- Opus / MP3 stream picker in the popup — switching mid-song reconnects
+  on the spot
 - Realtime updates over the station's socket.io feed (a tiny Engine.IO v4
   client over WebSockets — no REST polling), with automatic reconnect
 - One shared mpv stream and one socket connection, no matter how many
@@ -41,7 +43,7 @@ omarchy plugin remove brenc.newgrounds-radio
 
 That removes the plugin and its bar widget. The plugin never writes outside its
 own entry in `~/.config/omarchy/shell.json`; if you added an optional
-`trackNotifications` override there (see [Usage](#usage)), remove that entry by
+`trackNotifications` or `codec` override there (see [Usage](#usage)), remove that entry by
 hand. `qt6-websockets` is left installed — remove it with
 `omarchy pkg drop qt6-websockets` if nothing else needs it.
 
@@ -55,6 +57,7 @@ hand. `qt6-websockets` is left installed — remove it with
 | Popup: artist | Left | Open the artist's Newgrounds page |
 | Popup: NEWGROUNDS RADIO | Left | Open newgroundsradio.com |
 | Popup: history row | Left | Open that track on Newgrounds |
+| Popup: Opus / MP3 | Left | Switch the stream codec |
 
 Track-change notifications only fire while the stream is playing. To turn
 them off, add `"trackNotifications": false` to the widget's entry in
@@ -64,10 +67,15 @@ them off, add `"trackNotifications": false` to the widget's entry in
 { "id": "brenc.newgrounds-radio", "trackNotifications": false }
 ```
 
+The stream plays as Opus by default. To start on MP3 instead, set
+`"codec": "mp3"` in the same entry. The popup picker switches for the current
+session; the setting decides what the shell starts with.
+
 ## How it works
 
 - `Service.qml` (a singleton shell service) owns the mpv process for
-  <https://stream.newgroundsradio.com/radio.mp3> and a WebSocket connection to
+  the station stream (`radio.opus` or `radio.mp3` on
+  <https://stream.newgroundsradio.com>) and a WebSocket connection to
   the station's socket.io endpoint, which pushes a full status — current
   track, listeners, skip votes, play log — on connect and on every change.
   Playback auto-reconnects if the stream drops; the socket reconnects with a

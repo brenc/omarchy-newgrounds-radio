@@ -19,6 +19,29 @@
     "displayName": "Newgrounds Radio",
     "description": "Play/stop the stream from the bar; popup with album art, live stats, and play history",
     "category": "Media",
-    "allowMultiple": false
+    "allowMultiple": false,
+    "defaults": {
+      "codec": "opus",
+      "trackNotifications": true
+    },
+    "schema": [
+      {
+        "key": "codec",
+        "type": "enum",
+        "label": "Stream codec",
+        "options": [
+          "opus",
+          "mp3"
+        ],
+        "defaultValue": "opus",
+        "description": "Opus sounds better at a lower bitrate; MP3 is the classic stream."
+      },
+      {
+        "key": "trackNotifications",
+        "type": "boolean",
+        "label": "Track-change notifications",
+        "defaultValue": true
+      }
+    ]
   }
 }
