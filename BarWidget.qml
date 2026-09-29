@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell.Widgets
 import qs.Ui
 import qs.Commons
@@ -140,6 +141,49 @@ BarWidget {
     open: root.popupOpen
     contentWidth: popup.fittedContentWidth(Style.space(380))
     contentHeight: popup.fittedContentHeight(column.implicitHeight)
+
+    // Ambient backdrop, after newgroundsradio.com's .ngr-deck-ambient-art.
+    // PopupCard exposes no background property, so this reaches out over
+    // the card's padding and rounds to the inner edge of its border.
+    ClippingRectangle {
+      anchors.fill: parent
+      anchors.margins: -popup.padding
+      radius: Math.max(0, Style.cornerRadius - Border.left(popup.borderSpec))
+      color: "transparent"
+
+      Image {
+        id: ambientArt
+        // Overscanned so the blur's soft edge falls outside the clip.
+        anchors.centerIn: parent
+        width: parent.width * 1.4
+        height: parent.height * 1.4
+        fillMode: Image.PreserveAspectCrop
+        asynchronous: true
+        // Same URL and sourceSize as artImage, so the pixmap cache shares
+        // one fetch and decode, and the popup-only fetch gate still holds.
+        source: artImage.source
+        sourceSize.width: artImage.sourceSize.width
+        sourceSize.height: artImage.sourceSize.height
+        opacity: status === Image.Ready ? 0.38 : 0
+        visible: opacity > 0
+
+        Behavior on opacity {
+          NumberAnimation { duration: 900; easing.type: Easing.OutCubic }
+        }
+
+        layer.enabled: visible
+        layer.effect: MultiEffect {
+          autoPaddingEnabled: false
+          blurEnabled: true
+          blur: 1.0
+          blurMax: 64
+          saturation: 0.6
+          // Pulls bright covers down so secondary text keeps its contrast;
+          // dark covers barely change.
+          brightness: -0.25
+        }
+      }
+    }
 
     Column {
       id: column
