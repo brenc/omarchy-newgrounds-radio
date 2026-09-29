@@ -125,13 +125,21 @@ TestCase {
     var v = RadioLogic.normalizeStatus({
       title: "T\u202Ex", artist: "A", genre: "G",
       media_icon_url: "https://uploads.ngfiles.com/a.png?t=9",
-      listeners: "42", audio_id: "7", skip_votes: "bogus"
+      listeners: "42", audio_id: "7", skip_votes: "bogus", length: "233"
     }, freshState(), 0, null)
     compare(v.title, "T x")
     compare(v.bigArtUrl, "https://uploads.ngfiles.com/a.png")
     compare(v.listeners, 42)
     compare(v.audioId, 7)
     compare(v.skipVotes, 0)
+    compare(v.lengthSeconds, 233)
+  }
+  function test_normalize_length_rejects_out_of_range_and_junk() {
+    compare(RadioLogic.normalizeStatus({ length: -5 }, freshState(), 0, null).lengthSeconds, 0)
+    compare(RadioLogic.normalizeStatus({ length: "x" }, freshState(), 0, null).lengthSeconds, 0)
+    compare(RadioLogic.normalizeStatus({ length: 2147483648 }, freshState(), 0, null).lengthSeconds, 0)
+    compare(RadioLogic.normalizeStatus({ length: 86401 }, freshState(), 0, null).lengthSeconds, 0)
+    compare(RadioLogic.normalizeStatus({ length: 86400 }, freshState(), 0, null).lengthSeconds, 86400)
   }
   function test_normalize_prefers_cover_url() {
     var v = RadioLogic.normalizeStatus({

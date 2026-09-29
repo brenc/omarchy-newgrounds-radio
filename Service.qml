@@ -38,6 +38,7 @@ Item {
   property int audioId: 0
   property int listeners: 0
   property double onAirAt: 0
+  property int lengthSeconds: 0
   property int skipVotes: 0
   property int skipThreshold: 0
   property var playLog: []
@@ -104,6 +105,7 @@ Item {
     root.bigArtUrl = v.bigArtUrl
     root.listeners = v.listeners
     root.onAirAt = v.onAirAt
+    root.lengthSeconds = v.lengthSeconds
     root.skipVotes = v.skipVotes
     root.skipThreshold = v.skipThreshold
     root.audioId = v.audioId

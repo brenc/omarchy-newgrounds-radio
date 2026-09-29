@@ -124,6 +124,14 @@ function sanitizePlayLog(entries, st, now, warn) {
   return out
 }
 
+// Track length in seconds, or 0 when unknown. Anything past a day is not a
+// real track, and capping it keeps the value inside the QML int it lands in.
+var maxTrackSeconds = 86400
+function lengthSeconds(v) {
+  var n = parseInt(v, 10)
+  return n > 0 && n <= maxTrackSeconds ? n : 0
+}
+
 // The sanitized shape of a currently_playing payload. The caller owns the
 // change detection and the notification - this only normalizes.
 function normalizeStatus(d, st, now, warn) {
@@ -138,6 +146,7 @@ function normalizeStatus(d, st, now, warn) {
       || safeUrlLogged(cleanArtUrl(d.icon_url), st, now, warn),
     listeners: parseInt(d.listeners, 10) || 0,
     onAirAt: Number(d.on_air_at) || 0,
+    lengthSeconds: lengthSeconds(d.length),
     skipVotes: parseInt(d.skip_votes, 10) || 0,
     skipThreshold: parseInt(d.skip_threshold, 10) || 0,
     audioId: parseInt(d.audio_id, 10) || 0

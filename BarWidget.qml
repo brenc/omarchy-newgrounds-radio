@@ -62,13 +62,27 @@ BarWidget {
   // Ticks while the popup is open so the on-air elapsed readout advances.
   property double nowSeconds: 0
 
-  function elapsedText() {
-    if (!radio || !radio.onAirAt || !nowSeconds) return "—"
-    var s = Math.max(0, Math.floor(nowSeconds - radio.onAirAt))
+  function clockText(s) {
     var m = Math.floor(s / 60)
     var h = Math.floor(m / 60)
     var pad = function(n) { return (n < 10 ? "0" : "") + n }
     return h > 0 ? h + ":" + pad(m % 60) + ":" + pad(s % 60) : m + ":" + pad(s % 60)
+  }
+
+  readonly property int trackLength: radio ? radio.lengthSeconds : 0
+
+  // Seconds since the track went on air, held at the track length so a late
+  // status update can't run the readout past the end. -1 when unknown.
+  readonly property int elapsedSeconds: {
+    if (!radio || !radio.onAirAt || !nowSeconds) return -1
+    var s = Math.max(0, Math.floor(nowSeconds - radio.onAirAt))
+    return trackLength > 0 ? Math.min(s, trackLength) : s
+  }
+
+  function elapsedText() {
+    if (elapsedSeconds < 0) return "—"
+    return clockText(elapsedSeconds)
+      + (trackLength > 0 ? " / " + clockText(trackLength) : "")
   }
 
   Timer {
@@ -197,6 +211,7 @@ BarWidget {
         ClippingRectangle {
           width: Style.space(88)
           height: Style.space(88)
+          anchors.verticalCenter: parent.verticalCenter
           radius: Style.spacing.labelGap
           color: Style.normalFillFor(root.bar.foreground, Color.accent)
 
@@ -217,7 +232,12 @@ BarWidget {
             // both when the shell makes a request and what path it asks for.
             source: root.popupOpen && root.radio && root.radio.bigArtUrl
               ? root.radio.bigArtUrl : ""
-            visible: status === Image.Ready
+            opacity: status === Image.Ready ? 1 : 0
+            visible: opacity > 0
+
+            Behavior on opacity {
+              NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+            }
           }
 
           Text {
@@ -231,7 +251,25 @@ BarWidget {
             font.pixelSize: Style.font.displayLarge
           }
 
+          Rectangle {
+            anchors.fill: parent
+            color: Qt.rgba(0, 0, 0, 0.45)
+            opacity: artArea.containsMouse ? 1 : 0
+            visible: opacity > 0
+
+            Behavior on opacity { NumberAnimation { duration: 120 } }
+
+            Text {
+              anchors.centerIn: parent
+              text: "󰏌"
+              color: "white"
+              font.family: root.bar.fontFamily
+              font.pixelSize: Style.font.title
+            }
+          }
+
           MouseArea {
+            id: artArea
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
@@ -270,6 +308,8 @@ BarWidget {
             font.family: root.bar.fontFamily
             font.pixelSize: Style.font.subtitle
             font.bold: true
+            wrapMode: Text.Wrap
+            maximumLineCount: 2
             elide: Text.ElideRight
             width: parent.width
             font.underline: root.title !== "" && titleHover.hovered
@@ -317,6 +357,22 @@ BarWidget {
             width: parent.width
             visible: text !== ""
           }
+        }
+      }
+
+      Rectangle {
+        visible: root.trackLength > 0 && root.elapsedSeconds >= 0
+        width: parent.width
+        height: Math.max(2, Style.space(3))
+        radius: height / 2
+        color: Qt.rgba(root.bar.foreground.r, root.bar.foreground.g, root.bar.foreground.b, 0.15)
+
+        Rectangle {
+          width: parent.width * (root.trackLength > 0
+            ? Math.max(0, root.elapsedSeconds) / root.trackLength : 0)
+          height: parent.height
+          radius: parent.radius
+          color: root.ngOrange
         }
       }
 
@@ -468,14 +524,14 @@ BarWidget {
         Text {
           readonly property bool active: root.radio && root.radio.codec === "mp3"
           text: "MP3"
-          color: active ? root.bar.foreground : Qt.darker(root.bar.foreground, 1.6)
+          color: active || mp3Hover.hovered ? root.bar.foreground : Qt.darker(root.bar.foreground, 1.6)
           font.family: root.bar.fontFamily
           font.pixelSize: Style.font.caption
           font.bold: active
           font.letterSpacing: 1
           anchors.verticalCenter: parent.verticalCenter
 
-          HoverHandler { cursorShape: Qt.PointingHandCursor }
+          HoverHandler { id: mp3Hover; cursorShape: Qt.PointingHandCursor }
           TapHandler { onTapped: if (root.radio) root.radio.setCodec("mp3") }
         }
 
@@ -490,14 +546,14 @@ BarWidget {
         Text {
           readonly property bool active: root.radio && root.radio.codec === "opus"
           text: "OPUS"
-          color: active ? root.bar.foreground : Qt.darker(root.bar.foreground, 1.6)
+          color: active || opusHover.hovered ? root.bar.foreground : Qt.darker(root.bar.foreground, 1.6)
           font.family: root.bar.fontFamily
           font.pixelSize: Style.font.caption
           font.bold: active
           font.letterSpacing: 1
           anchors.verticalCenter: parent.verticalCenter
 
-          HoverHandler { cursorShape: Qt.PointingHandCursor }
+          HoverHandler { id: opusHover; cursorShape: Qt.PointingHandCursor }
           TapHandler { onTapped: if (root.radio) root.radio.setCodec("opus") }
         }
       }
