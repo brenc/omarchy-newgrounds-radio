@@ -112,9 +112,40 @@ Item {
     if (RadioLogic.shouldNotify(changed, root.notifyOnTrackChange, root.playing,
                                 now, root.lastNotifyAt)) {
       root.lastNotifyAt = now
-      Quickshell.execDetached(["notify-send", "-a", "Newgrounds Radio", "-e", "--",
-        RadioLogic.stripMarkup(root.title),
-        RadioLogic.escapeMarkup(root.artist + (root.genre ? "  \u00b7  " + root.genre : ""))])
+      notifyTrack()
+    }
+  }
+
+  // Cover art for the toast lands here; artFetch's argv clears old files.
+  readonly property string artDir: Quickshell.cachePath("newgrounds-radio")
+
+  // One fetch per track change, in the shared service - so one request
+  // however many monitors there are, and only while the user is listening.
+  // A fetch still in flight (tracks flipping faster than curl's timeout)
+  // means this toast goes out without art rather than queueing.
+  function notifyTrack() {
+    var track = {
+      title: root.title, artist: root.artist, genre: root.genre,
+      lengthSeconds: root.lengthSeconds, audioId: root.audioId,
+      listenUrl: root.listenUrl
+    }
+    if (!root.bigArtUrl || artFetch.running) {
+      Quickshell.execDetached(RadioLogic.trackNotifyArgv(track, ""))
+      return
+    }
+    artFetch.track = track
+    artFetch.command = RadioLogic.artFetchArgv(root.artDir, track.audioId, root.bigArtUrl)
+    artFetch.running = true
+  }
+
+  Process {
+    id: artFetch
+    property var track: null
+    onExited: function(exitCode) {
+      if (!RadioLogic.shouldSendFetchedToast(track.audioId, root.audioId,
+                                             root.notifyOnTrackChange, root.playing)) return
+      var art = exitCode === 0 ? "file://" + root.artDir + "/art-" + track.audioId : ""
+      Quickshell.execDetached(RadioLogic.trackNotifyArgv(track, art))
     }
   }
 

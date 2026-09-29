@@ -88,8 +88,16 @@ When touching anything that reads a feed field, keep these invariants:
   sets the message rate. Each also tests `now < last` so a backwards clock
   correction can't wedge the gate shut.
 
-Album art is fetched only while the popup is open — otherwise the feed would
-choose when every monitor's bar makes a request.
+Popup album art is fetched only while the popup is open — otherwise the feed
+would choose when every monitor's bar makes a request. The track-change toast
+is the one exception: the shared service downloads the art once per notified
+track (so behind the same playing/enabled/rate-floor gate), with curl pinned
+to https, no redirects, and a size and time cap. A failed fetch still sends
+the toast, just without art.
+
+Toasts go out as a raw `Notify` call over `busctl`, not `notify-send`, so they
+can carry the host's `omarchy-exec-argv` (click opens the track) and
+`omarchy-glyph` hints alongside `transient`.
 
 ## Playback
 

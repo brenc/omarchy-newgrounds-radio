@@ -15,7 +15,8 @@ station.
 - Recently-played list — each track row links to the track on Newgrounds
 - Album art and title link to the track page; the artist links to their
   Newgrounds user page (when the artist is a single username)
-- Desktop notification on track change while you're listening
+- Desktop notification on track change while you're listening, with cover
+  art — click it to open the track on Newgrounds
 - Opus / MP3 stream picker in the popup — switching mid-song reconnects
   on the spot
 - Realtime updates over the station's socket.io feed (a tiny Engine.IO v4
@@ -41,8 +42,10 @@ settings, or run `omarchy restart shell` if it does not appear.
 omarchy plugin remove brenc.newgrounds-radio
 ```
 
-That removes the plugin and its bar widget. The plugin never writes outside its
-own entry in `~/.config/omarchy/shell.json`; if you added an optional
+That removes the plugin and its bar widget. Besides the current track's cover
+art (a single file in the shell's cache directory, under `newgrounds-radio/`),
+the plugin never writes outside its own entry in
+`~/.config/omarchy/shell.json`; if you added an optional
 `trackNotifications` or `codec` override there (see [Usage](#usage)), remove that entry by
 hand. `qt6-websockets` is left installed — remove it with
 `omarchy pkg drop qt6-websockets` if nothing else needs it.

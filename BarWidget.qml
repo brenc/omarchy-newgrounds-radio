@@ -3,6 +3,7 @@ import QtQuick.Effects
 import Quickshell.Widgets
 import qs.Ui
 import qs.Commons
+import "RadioLogic.js" as RadioLogic
 
 BarWidget {
   id: root
@@ -62,13 +63,6 @@ BarWidget {
   // Ticks while the popup is open so the on-air elapsed readout advances.
   property double nowSeconds: 0
 
-  function clockText(s) {
-    var m = Math.floor(s / 60)
-    var h = Math.floor(m / 60)
-    var pad = function(n) { return (n < 10 ? "0" : "") + n }
-    return h > 0 ? h + ":" + pad(m % 60) + ":" + pad(s % 60) : m + ":" + pad(s % 60)
-  }
-
   readonly property int trackLength: radio ? radio.lengthSeconds : 0
 
   // Seconds since the track went on air, held at the track length so a late
@@ -81,8 +75,8 @@ BarWidget {
 
   function elapsedText() {
     if (elapsedSeconds < 0) return "—"
-    return clockText(elapsedSeconds)
-      + (trackLength > 0 ? " / " + clockText(trackLength) : "")
+    return RadioLogic.clockText(elapsedSeconds)
+      + (trackLength > 0 ? " / " + RadioLogic.clockText(trackLength) : "")
   }
 
   Timer {

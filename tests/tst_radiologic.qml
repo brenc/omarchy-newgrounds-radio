@@ -183,6 +183,61 @@ TestCase {
     compare(RadioLogic.shouldNotify(true, true, true, 1000, 900000), true)
   }
 
+  // ---- shouldSendFetchedToast
+  function test_fetched_toast_needs_same_track_enabled_and_playing() {
+    compare(RadioLogic.shouldSendFetchedToast(7, 7, true, true), true)
+    compare(RadioLogic.shouldSendFetchedToast(7, 8, true, true), false)
+    compare(RadioLogic.shouldSendFetchedToast(7, 7, false, true), false)
+    compare(RadioLogic.shouldSendFetchedToast(7, 7, true, false), false)
+  }
+
+  // ---- clockText
+  function test_clock_minutes_and_hours() {
+    compare(RadioLogic.clockText(0), "0:00")
+    compare(RadioLogic.clockText(222), "3:42")
+    compare(RadioLogic.clockText(3723), "1:02:03")
+  }
+
+  // ---- notification
+  function track() {
+    return { title: "<b>Song</b>", artist: "A&B", genre: "Rock <3", lengthSeconds: 222,
+             audioId: 7, listenUrl: "https://www.newgrounds.com/audio/listen/7" }
+  }
+  function hintsOf(argv) {
+    var at = argv.indexOf("susssasa{sv}i") + 7
+    var n = parseInt(argv[at], 10)
+    var h = {}
+    for (var i = 0; i < n; i++) h[argv[at + 1 + i * 3]] = argv[at + 3 + i * 3]
+    compare(argv.length, at + 1 + n * 3 + 1)
+    return h
+  }
+  function test_notify_body_escapes_and_splits_lines() {
+    compare(RadioLogic.notifyBody("A&B", "Rock <3", 222), "A&amp;B\nRock &lt;3  ·  3:42")
+    compare(RadioLogic.notifyBody("", "", 0), "")
+    compare(RadioLogic.notifyBody("A", "", 0), "A")
+  }
+  function test_notify_argv_shape() {
+    var argv = RadioLogic.trackNotifyArgv(track(), "")
+    compare(argv[0], "busctl")
+    var at = argv.indexOf("susssasa{sv}i")
+    compare(argv[at + 4], "bSong/b")
+    compare(argv[argv.length - 1], "-1")
+    var h = hintsOf(argv)
+    compare(h["transient"], "true")
+    compare(JSON.parse(h["omarchy-exec-argv"]), ["xdg-open", "https://www.newgrounds.com/audio/listen/7"])
+    compare(h["image-path"], undefined)
+  }
+  function test_notify_argv_carries_art() {
+    var h = hintsOf(RadioLogic.trackNotifyArgv(track(), "file:///c/art-7"))
+    compare(h["image-path"], "file:///c/art-7")
+  }
+  function test_art_fetch_keeps_values_out_of_the_script() {
+    var argv = RadioLogic.artFetchArgv("/c", "7x", "https://a.ngfiles.com/$(x)")
+    compare(argv.slice(3), ["--", "/c", "7", "https://a.ngfiles.com/$(x)", "5242880"])
+    verify(argv[2].indexOf("ngfiles") === -1)
+    verify(argv[2].indexOf(" -L") === -1)
+  }
+
   // ---- classifyFrame
   function test_frame_open_ping_connected_reconnect() {
     compare(RadioLogic.classifyFrame('0{"sid":"x"}').kind, "open")

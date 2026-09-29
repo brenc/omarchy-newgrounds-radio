@@ -162,6 +162,76 @@ function shouldNotify(changed, enabled, playing, now, lastNotifyAt) {
     && (now - lastNotifyAt > minNotifyInterval || now < lastNotifyAt))
 }
 
+// Whether a toast whose art fetch just finished is still worth sending. The
+// fetch takes seconds, and in that window the listener may have stopped the
+// stream, turned notifications off, or the feed moved to another track - a
+// toast for any of those would announce something that isn't playing.
+function shouldSendFetchedToast(trackAudioId, currentAudioId, enabled, playing) {
+  return !!(trackAudioId === currentAudioId && enabled && playing)
+}
+
+// A duration in seconds as m:ss, or h:mm:ss from an hour up.
+function clockText(s) {
+  var m = Math.floor(s / 60)
+  var h = Math.floor(m / 60)
+  var pad = function(n) { return (n < 10 ? "0" : "") + n }
+  return h > 0 ? h + ":" + pad(m % 60) + ":" + pad(s % 60) : m + ":" + pad(s % 60)
+}
+
+// ---- Track-change notification.
+var maxArtBytes = 5242880
+var notifyGlyph = "\u{f075a}"
+
+// Downloads cover art for the toast into dir as art-<audioId>, clearing the
+// previous track's file first. The host notification service copies an
+// image the moment the toast arrives, so nothing else reads the old file.
+// Values travel as positional parameters, never through the script text. No
+// -L: following a redirect would leave the safeUrl allowlist behind, and
+// --proto pins https even so. Exits non-zero on any failure, in which case
+// the caller sends the toast without art.
+function artFetchArgv(dir, audioId, url) {
+  return ["bash", "-c",
+    "mkdir -p -- \"$1\" && rm -f -- \"$1\"/art-* && " +
+    "exec curl -fsS --proto =https --connect-timeout 3 --max-time 5 " +
+    "--max-filesize \"$4\" -o \"$1/art-$2\" -- \"$3\"",
+    "--", String(dir), String(parseInt(audioId, 10) || 0), String(url),
+    String(maxArtBytes)]
+}
+
+// The toast body: artist on the first line, then genre and length. Bodies
+// are markup-parsed by the notification server, so every field is escaped.
+function notifyBody(artist, genre, lengthSeconds) {
+  var details = []
+  if (genre) details.push(escapeMarkup(genre))
+  if (lengthSeconds > 0) details.push(clockText(lengthSeconds))
+  var lines = []
+  if (artist) lines.push(escapeMarkup(artist))
+  if (details.length) lines.push(details.join("  ·  "))
+  return lines.join("\n")
+}
+
+// A Notify call on the session bus, as busctl argv. busctl rather than
+// notify-send so the toast can carry Omarchy's hints: omarchy-exec-argv
+// opens the track on click (and survives a shell restart, unlike a
+// libnotify action), and omarchy-glyph stands in when there is no art.
+// `transient` keeps a toast silenced by Do Not Disturb out of history - a
+// session's worth of tracks there is noise. artUrl is a file:// URL or "".
+function trackNotifyArgv(t, artUrl) {
+  var hints = [
+    "urgency", "y", "1",
+    "transient", "b", "true",
+    "omarchy-glyph", "s", notifyGlyph,
+    "omarchy-exec-argv", "s", JSON.stringify(["xdg-open", t.listenUrl])
+  ]
+  if (artUrl) hints.push("image-path", "s", artUrl)
+  return ["busctl", "--user", "--", "call",
+    "org.freedesktop.Notifications", "/org/freedesktop/Notifications",
+    "org.freedesktop.Notifications", "Notify", "susssasa{sv}i",
+    "Newgrounds Radio", "0", "", stripMarkup(t.title),
+    notifyBody(t.artist, t.genre, t.lengthSeconds),
+    "0", String(hints.length / 3)].concat(hints, ["-1"])
+}
+
 // ---- Realtime feed: minimal Engine.IO v4 framing over WebSocket.
 //   "0{...}"  open handshake  -> reply "40" to join the default namespace
 //   "40..."   namespace ack   -> connected
