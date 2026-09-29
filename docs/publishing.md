@@ -74,7 +74,8 @@ commit to the new HEAD; editing the issue reruns the checks.
 | Version | Commit    | Request |
 | ------- | --------- | ------- |
 | 1.0.0   | —         | [#2665][initial] (initial listing) |
-| 1.1.0   | `6a8a8ca` | [#9212][v1.1.0] |
+| 1.1.0   | `6a8a8ca` | [#9212][v1.1.0] — superseded by 1.2.0 before approval |
+| 1.2.0   | `f6d1ded` | [#9212][v1.1.0] (retargeted) |
 
 Full policy: [VERIFICATION.md][policy] in the marketplace repository.
 
