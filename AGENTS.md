@@ -108,8 +108,12 @@ Popup album art is fetched only while the popup is open — otherwise the feed
 would choose when every monitor's bar makes a request. The track-change toast
 is the one exception: the shared service downloads the art once per notified
 track (so behind the same playing/enabled/rate-floor gate), with curl pinned
-to https, no redirects, and a size and time cap. A failed fetch still sends
-the toast, just without art.
+to https, no redirects, and a size and time cap. curl writes into a fresh
+`mktemp -d` directory (0700, unguessable name) rather than a fixed filename,
+so a planted symlink can't redirect the write; the previous fetch's directory
+is removed, without following links, when the next fetch starts. The script
+prints the file's path, and `fetchedArtPath` only accepts exactly that shape
+under the cache dir. A failed fetch still sends the toast, just without art.
 
 `Process` reports its exit code and its collected stdout as separate
 signals in an order Quickshell doesn't document (0.3.1 happens to finish

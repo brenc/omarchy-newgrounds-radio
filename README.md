@@ -42,7 +42,7 @@ omarchy plugin remove brenc.newgrounds-radio
 ```
 
 That removes the plugin and its bar widget. Besides the current track's cover
-art (one small file in the shell's cache directory, under
+art (one cached image in the shell's cache directory, under
 `newgrounds-radio/`),
 the plugin never writes outside its own entry in
 `~/.config/omarchy/shell.json`; if you added an optional

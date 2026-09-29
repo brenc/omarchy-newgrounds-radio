@@ -115,7 +115,8 @@ Item {
     }
   }
 
-  // Cover art for the toast lands here; artFetch's argv clears old files.
+  // Cover art for the toast lands here, one private directory per fetch;
+  // artFetch's argv clears the previous one.
   readonly property string artDir: Quickshell.cachePath("newgrounds-radio")
 
   // One fetch per track change, in the shared service - so one request
@@ -133,8 +134,7 @@ Item {
       return
     }
     artFetch.track = track
-    artFetch.command = RadioLogic.artFetchArgv(root.artDir, track.audioId, root.bigArtUrl)
-    artFetch.running = true
+    artFetch.launch(RadioLogic.artFetchArgv(root.artDir, track.audioId, root.bigArtUrl))
   }
 
   // A Process whose exit code and complete stdout are delivered together by
@@ -170,14 +170,14 @@ Item {
     }
   }
 
-  Process {
+  CollectedProcess {
     id: artFetch
     property var track: null
-    onExited: function(exitCode) {
+    onSettled: function(exitCode, out) {
       if (!RadioLogic.shouldSendFetchedToast(track.audioId, root.audioId,
                                              root.notifyOnTrackChange, root.playing)) return
-      var art = exitCode === 0 ? "file://" + root.artDir + "/art-" + track.audioId : ""
-      Quickshell.execDetached(RadioLogic.trackNotifyArgv(track, art))
+      var path = RadioLogic.fetchedArtPath(root.artDir, track.audioId, exitCode, out)
+      Quickshell.execDetached(RadioLogic.trackNotifyArgv(track, path ? "file://" + path : ""))
     }
   }
 

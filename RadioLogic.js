@@ -182,20 +182,41 @@ function clockText(s) {
 var maxArtBytes = 5242880
 var notifyGlyph = "\u{f075a}"
 
-// Downloads cover art for the toast into dir as art-<audioId>, clearing the
-// previous track's file first. The host notification service copies an
+// Downloads cover art for the toast into a fresh private directory under dir
+// and prints the file's path on stdout; fetchedArtPath() vets that output.
+// curl never opens a predictable path: mktemp -d creates the directory 0700
+// under an unguessable name, so nothing can be planted in it beforehand. The
+// previous track's directory goes first - rm -rf removes a symlink itself
+// rather than following it, and the host notification service copies an
 // image the moment the toast arrives, so nothing else reads the old file.
-// Values travel as positional parameters, never through the script text. No
-// -L: following a redirect would leave the safeUrl allowlist behind, and
-// --proto pins https even so. Exits non-zero on any failure, in which case
-// the caller sends the toast without art.
+// Values travel as positional parameters, never through the script text. -q
+// keeps a user's ~/.curlrc out of it. No -L: following a redirect would leave
+// the safeUrl allowlist behind, and --proto pins https even so. Prints
+// nothing and exits non-zero on any failure, in which case the caller sends
+// the toast without art.
 function artFetchArgv(dir, audioId, url) {
   return ["bash", "-c",
-    "mkdir -p -- \"$1\" && rm -f -- \"$1\"/art-* && " +
-    "exec curl -fsS --proto =https --connect-timeout 3 --max-time 5 " +
-    "--max-filesize \"$4\" -o \"$1/art-$2\" -- \"$3\"",
+    "mkdir -p -- \"$1\" && rm -rf -- \"$1\"/art.* \"$1\"/art-* && " +
+    "d=$(mktemp -d -- \"$1/art.XXXXXXXXXX\") && " +
+    "curl -q -fsS --proto =https --connect-timeout 3 --max-time 5 " +
+    "--max-filesize \"$4\" -o \"$d/art-$2\" -- \"$3\" && " +
+    "printf '%s\\n' \"$d/art-$2\"",
     "--", String(dir), String(parseInt(audioId, 10) || 0), String(url),
     String(maxArtBytes)]
+}
+
+// The art file an artFetchArgv run reported, or "" unless the run succeeded
+// and the path is exactly the shape that script creates inside dir. Anything
+// else - a failed fetch, stray output - means a toast without art.
+function fetchedArtPath(dir, audioId, exitCode, out) {
+  if (exitCode !== 0) return ""
+  var s = String(out === undefined || out === null ? "" : out).replace(/\n$/, "")
+  var prefix = String(dir) + "/art."
+  if (s.substring(0, prefix.length) !== prefix) return ""
+  var rest = s.substring(prefix.length)
+  var name = "/art-" + (parseInt(audioId, 10) || 0)
+  return /^[A-Za-z0-9]{10}\/art-[0-9]+$/.test(rest)
+    && rest.substring(10) === name ? s : ""
 }
 
 // The toast body: artist on the first line, then genre and length. Bodies

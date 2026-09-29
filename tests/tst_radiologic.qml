@@ -241,6 +241,28 @@ TestCase {
   }
   // curl writes only inside a fresh mktemp -d directory, never to a fixed
   // name in the cache dir where a symlink could be waiting.
+  function test_art_fetch_writes_inside_a_fresh_private_dir() {
+    var script = RadioLogic.artFetchArgv("/c", 7, "https://a.ngfiles.com/a")[2]
+    verify(script.indexOf("d=$(mktemp -d -- \"$1/art.XXXXXXXXXX\")") !== -1)
+    verify(script.indexOf("-o \"$d/art-$2\"") !== -1)
+    verify(script.indexOf("-o \"$1") === -1)
+    verify(script.indexOf("rm -rf -- \"$1\"/art.* ") !== -1)
+  }
+  function test_fetched_art_path_accepts_only_the_expected_shape() {
+    compare(RadioLogic.fetchedArtPath("/c", 7, 0, "/c/art.Ab3dEf9hIj/art-7\n"),
+            "/c/art.Ab3dEf9hIj/art-7")
+    compare(RadioLogic.fetchedArtPath("/c", 7, 22, "/c/art.Ab3dEf9hIj/art-7\n"), "")
+    compare(RadioLogic.fetchedArtPath("/c", 7, 0, ""), "")
+    compare(RadioLogic.fetchedArtPath("/c", 7, 0, "/c/art.Ab3dEf9hIj/art-8\n"), "")
+    compare(RadioLogic.fetchedArtPath("/c", 7, 0, "/elsewhere/art.Ab3dEf9hIj/art-7"), "")
+    // Same length as "/c/art." so only the prefix test can reject it.
+    compare(RadioLogic.fetchedArtPath("/c", 7, 0, "/d/art.Ab3dEf9hIj/art-7"), "")
+    compare(RadioLogic.fetchedArtPath("/c", 7, 0, "/c/art.Ab3dEf9hIj/../../etc/passwd"), "")
+    compare(RadioLogic.fetchedArtPath("/c", 7, 0, "/c/art.short/art-7"), "")
+    compare(RadioLogic.fetchedArtPath("/c", 7, 0, "/c/art.Ab3dEf9hIj/art-7\n/x"), "")
+  }
+
+  // ---- feed transport
   function test_sid_validation() {
     verify(RadioLogic.validSid("3DevBcH9vq1QjgBaAAKC"))
     verify(RadioLogic.validSid("eefabnIG-YCL9ArMAAJp"))
