@@ -5,6 +5,9 @@ entry points declared in `manifest.json`: `Service.qml` (shared, `keepLoaded`)
 and `BarWidget.qml` (one instance per monitor). User-facing behavior lives in
 README.md — this file covers what the code alone won't tell you.
 
+Releasing a new version to the marketplace listing is a manual request, not a
+push: see [docs/publishing.md](docs/publishing.md).
+
 ## Verify before you commit
 
 ```bash
