@@ -133,6 +133,20 @@ TestCase {
     compare(v.audioId, 7)
     compare(v.skipVotes, 0)
   }
+  function test_normalize_prefers_cover_url() {
+    var v = RadioLogic.normalizeStatus({
+      cover_url: "https://aicon.ngfiles.com/1/1_cover.webp?f123",
+      media_icon_url: "https://aicon.ngfiles.com/1/1_raw.png"
+    }, freshState(), 0, null)
+    compare(v.bigArtUrl, "https://aicon.ngfiles.com/1/1_cover.webp")
+  }
+  function test_normalize_falls_back_past_rejected_cover_url() {
+    var v = RadioLogic.normalizeStatus({
+      cover_url: "https://evil.com/c.webp",
+      media_icon_url: "https://aicon.ngfiles.com/1/1_raw.png"
+    }, freshState(), 0, null)
+    compare(v.bigArtUrl, "https://aicon.ngfiles.com/1/1_raw.png")
+  }
   function test_normalize_falls_back_to_icon_url() {
     var v = RadioLogic.normalizeStatus({
       media_icon_url: "https://evil.com/a.png",
@@ -142,6 +156,7 @@ TestCase {
   }
   function test_normalize_rejects_both_art_urls() {
     var v = RadioLogic.normalizeStatus({
+      cover_url: "file:///etc/passwd",
       media_icon_url: "https://evil.com/a.png", icon_url: "http://newgrounds.com/b.png"
     }, freshState(), 0, null)
     compare(v.bigArtUrl, "")

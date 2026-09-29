@@ -131,7 +131,10 @@ function normalizeStatus(d, st, now, warn) {
     title: sanitizeText(d.title, maxFieldLength),
     artist: sanitizeText(d.artist, maxFieldLength),
     genre: sanitizeText(d.genre, maxFieldLength),
-    bigArtUrl: safeUrlLogged(cleanArtUrl(d.media_icon_url), st, now, warn)
+    // cover_url is square 600px art; the icon fields are older fallbacks
+    // (media_icon_url is 16:9 and gets cropped in the square slot).
+    bigArtUrl: safeUrlLogged(cleanArtUrl(d.cover_url), st, now, warn)
+      || safeUrlLogged(cleanArtUrl(d.media_icon_url), st, now, warn)
       || safeUrlLogged(cleanArtUrl(d.icon_url), st, now, warn),
     listeners: parseInt(d.listeners, 10) || 0,
     onAirAt: Number(d.on_air_at) || 0,
